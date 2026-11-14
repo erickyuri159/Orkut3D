@@ -1,0 +1,10 @@
+node_modules
+.uploads
+tests/.tmp
+.next
+.next/dev
+next-env.d.ts
+*.db
+*.db-journal
+.env.local
+.DS_Store

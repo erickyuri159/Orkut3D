@@ -1,0 +1,351 @@
+// ORB // 2088 — schema completo (PostgreSQL)
+// Nota: os "enums" abaixo sao strings validadas no dominio (src/lib/enums.ts),
+// para o dominio nao ficar preso ao enum nativo do banco.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String  @id @default(cuid())
+  uid          String  @unique // id publico no formato 1234-5678-9012
+  email        String  @unique
+  username     String  @unique
+  passwordHash String
+  name         String
+  avatarSeed   String  @default("0") // semente do avatar procedural 3D
+  avatarUrl    String  @default("") // foto enviada; vazio = usa o nucleo 3D
+
+  // Perfil
+  headline     String  @default("")
+  bio          String  @default("")
+  aboutMe      String  @default("")
+  birthday     DateTime?
+  gender       String  @default("")
+  city         String  @default("")
+  state        String  @default("")
+  country      String  @default("BR")
+  relationship String  @default("")
+  lookingFor   String  @default("")
+  hobbies      String  @default("")
+  job          String  @default("")
+  school       String  @default("")
+  favoriteMus  String  @default("")
+  quote        String  @default("")
+
+  isPublic   Boolean @default(true)
+  credits    Int     @default(100)
+  profileViews Int   @default(0)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastSeenAt DateTime @default(now())
+
+  photos          Photo[]
+  media           Media[]
+  videos          Video[]
+  tracks          Track[]
+  books           Book[]
+  scraps          Scrap[]        @relation("ScrapProfile")
+  scrapComments   ScrapComment[]
+  sentScraps      Scrap[]        @relation("ScrapAuthor")
+  sentPokes       Poke[]         @relation("PokeFrom")
+  receivedPokes   Poke[]         @relation("PokeTo")
+  friendsFrom     Friendship[]   @relation("FriendRequester")
+  friendsTo       Friendship[]   @relation("FriendAddressee")
+  shout           Shout[]
+  shoutLikes      ShoutLike[]
+  sentMessages    Message[]      @relation("MsgFrom")
+  gotMessages     Message[]      @relation("MsgTo")
+  notifications   Notification[] @relation("NotifyRecipient")
+  causedNotifs    Notification[] @relation("NotifyActor")
+  visitsMade      ProfileVisit[] @relation("VisitVisitor")
+  visitsReceived  ProfileVisit[] @relation("VisitProfile")
+  ownedComms      Community[]    @relation("CommunityOwner")
+  memberships     CommunityMember[]
+  posts           CommunityPost[]
+  postComments    CommunityComment[]
+  listings        Listing[]
+  achievements    Achievement[]
+
+  @@index([username])
+}
+
+// ---- Mídia enviada pelo usuario ----
+model Media {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String   @unique // nome do objeto no storage
+  mime      String
+  size      Int
+  width     Int      @default(0)
+  height    Int      @default(0)
+  kind      String   @default("photo") // photo | avatar | cover | scrap
+  caption   String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([userId, kind])
+  @@index([kind])
+}
+
+model Photo {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seed   String
+  caption String @default("")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Video {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  seed      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Track {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  artist    String
+  seed      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Book {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  author    String
+  status    String   @default("reading") // reading | finished | want
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---- Scrapbook (o livro de recados do perfil) ----
+model Scrap {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   User     @relation("ScrapProfile", fields: [profileId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("ScrapAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  message   String
+  thumb     String   @default("")
+  private   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  comments  ScrapComment[]
+
+  @@index([profileId, createdAt])
+}
+
+model ScrapComment {
+  id       String   @id @default(cuid())
+  scrapId  String
+  scrap    Scrap    @relation(fields: [scrapId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body     String
+  createdAt DateTime @default(now())
+
+  @@index([scrapId])
+}
+
+// ---- Pokes ----
+model Poke {
+  id        String    @id @default(cuid())
+  fromId    String
+  from      User      @relation("PokeFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String
+  to        User      @relation("PokeTo", fields: [toId], references: [id], onDelete: Cascade)
+  kind      String    @default("poke") // poke | wave | high-five | hug | insult
+  createdAt DateTime  @default(now())
+  seenAt    DateTime?
+
+  @@index([toId, seenAt])
+  @@index([fromId, createdAt])
+}
+
+// ---- Amizades ----
+model Friendship {
+  id          String    @id @default(cuid())
+  requesterId String
+  requester   User      @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addresseeId String
+  addressee   User      @relation("FriendAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+  status      String    @default("PENDING") // PENDING | ACCEPTED
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+// ---- Recados / feed ----
+model Shout {
+  id        String     @id @default(cuid())
+  authorId  String
+  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime   @default(now())
+  likes     ShoutLike[]
+
+  @@index([createdAt])
+}
+
+model ShoutLike {
+  id      String   @id @default(cuid())
+  shoutId String
+  shout   Shout    @relation(fields: [shoutId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shoutId, userId])
+}
+
+// ---- Mensagens privadas ----
+model Message {
+  id        String    @id @default(cuid())
+  fromId    String
+  from      User      @relation("MsgFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String
+  to        User      @relation("MsgTo", fields: [toId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  @@index([toId, readAt])
+  @@index([fromId, toId])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation("NotifyRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actorId     String?
+  actor       User?     @relation("NotifyActor", fields: [actorId], references: [id], onDelete: Cascade)
+  type        String
+  body        String
+  href        String    @default("/")
+  createdAt   DateTime  @default(now())
+  readAt      DateTime?
+
+  @@index([userId, readAt])
+}
+
+// ---- Visitas ao perfil ----
+model ProfileVisit {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   User     @relation("VisitProfile", fields: [profileId], references: [id], onDelete: Cascade)
+  visitorId String
+  visitor   User     @relation("VisitVisitor", fields: [visitorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([profileId, createdAt])
+}
+
+// ---- Comunidades ----
+model Community {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  tagline     String   @default("")
+  description String   @default("")
+  theme       String   @default("#00e5ff")
+  seed        String   @default("0")
+  ownerId     String
+  owner       User     @relation("CommunityOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  members     CommunityMember[]
+  posts       CommunityPost[]
+}
+
+model CommunityMember {
+  id          String   @id @default(cuid())
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String   @default("MEMBER") // MEMBER | MODERATOR
+  createdAt   DateTime @default(now())
+
+  @@unique([communityId, userId])
+}
+
+model CommunityPost {
+  id          String   @id @default(cuid())
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title       String
+  body        String
+  pinned      Boolean  @default(false)
+  locked      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  comments    CommunityComment[]
+
+  @@index([communityId, createdAt])
+}
+
+model CommunityComment {
+  id        String        @id @default(cuid())
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime      @default(now())
+
+  @@index([postId])
+}
+
+// ---- Classificados (mercado) ----
+model Listing {
+  id          String   @id @default(cuid())
+  sellerId    String
+  seller      User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  title       String
+  description String   @default("")
+  price       Float
+  category    String   @default("outros")
+  location    String   @default("")
+  seed        String   @default("0")
+  sold        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// ---- Conquistas ----
+model Achievement {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code        String
+  name        String
+  description String   @default("")
+  icon        String   @default("star")
+  unlockedAt  DateTime @default(now())
+
+  @@unique([userId, code])
+}
